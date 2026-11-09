@@ -1,0 +1,84 @@
+
+tag: shandong_202401
+
+# 1. 核心解码参数 (对应你的文件名)
+data_file: data/pm2.5_2024/st_kriging_ready_data_with_covariates.csv
+# 山东 2024-01-01 00:00 至 2024-01-31 23:00（含端点）；原始全年 CSV 不改动。
+# 一月 31 天 = 744 个小时。所有对比方法须使用同一窗口。
+target_col: pm2.5
+coord_cols: [lat, lon]
+station_col: station_code
+covariate_cols: [temp, humidity, wind_speed, pressure]
+time_col: t
+time_start: 1
+time_end: 744
+time_index_base: 1
+short_period: 24       # 小时数据的日周期
+long_period: 8784      # 2024 闰年的年周期；不随截取窗口缩短
+target_scale: 500.0    # 与此前山东模型保持一致
+target_unit: ug/m3
+spatial_basis_function: wendland
+spatial_init_method: kmeans_balanced
+spatial_learnable: true
+obs_method: random
+obs_ratio: 0.5
+obs_spatial_pattern: uniform
+
+# ------------------------------------------
+# 以下是你之前 config_st_interp.yaml 里的原始稳定配置
+# ------------------------------------------
+# 模型架构
+k_spatial_centers: [25, 81, 121]
+k_temporal_centers: [10, 15, 45]
+hidden_dims: [256, 256, 128]
+dropout: 0.01
+layernorm: true
+p_covariates: 4
+
+# 移动与正则化控制 (因为 learnable=true，这里保持原来的惩罚设置)
+gradient_damping: true
+damping_threshold: 0.0
+damping_strength: 5.0
+domain_penalty_weight: 0.01
+movement_penalty_weight: 0.0
+sparsity_penalty_type: sparse_group
+sparsity_lambda_l1: 0.0
+sparsity_lambda_group: 0.001
+sparsity_apply_to_spatial: true
+sparsity_apply_to_temporal: false
+sparsity_threshold_ratio: 0.01
+
+# 数据划分设定
+obs_spatial_intensity: 10.0
+split_method: random
+train_ratio: 0.8
+normalize_target: true
+
+# 训练超参数
+epochs: 100
+lr: 5e-3
+basis_lr_ratio: 0.05
+weight_decay: 5e-4
+batch_size: 4096
+patience: 50
+grad_clip: 10.0
+scheduler: cosine
+warmup_epochs: 10
+basis_unfreeze_epoch: 10
+basis_lr_rampup_epochs: 10
+
+# 实验与评测设置
+n_experiments: 1        # 💡 强烈建议：先设为 1 跑通看看效果，要发论文时再改成 50
+base_seed: 2026
+num_workers: 0
+
+# 分位数回归
+regression_type: multi-quantile
+#regression_type: mean
+quantile_levels: [0.05, 0.25, 0.5, 0.75, 0.95]
+# 【关键修改】：因为 PM2.5 除以了 500，delta 必须相应缩小
+# 推荐范围：0.02 到 0.1 之间（原来：0.05 ）
+huber_delta: 0.05  # 相当于真实 PM2.5 误差大于 25 时启动 L1 保护
+# 也可以尝试: 0.02 (非常抗噪) 或 0.1 (稍微抗噪)
+
+device: cuda  # 💡 如果你有显卡，记得改成 cuda；没有就用 cpu
